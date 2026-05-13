@@ -9,17 +9,33 @@ export interface ChatRequest {
   max_tokens?: number;
 }
 
+function formatChatFetchError(err: unknown): Error {
+  if (err instanceof TypeError && String(err.message).toLowerCase().includes('fetch')) {
+    const hint =
+      import.meta.env.DEV
+        ? ' Comprueba que `jarvis serve` esté en marcha. En desarrollo deja la URL de API vacía en Ajustes para usar el proxy de Vite (evita CORS entre localhost y 127.0.0.1).'
+        : ' Comprueba que el servidor OpenJarvis esté en marcha y la URL de API en Ajustes.';
+    return new Error(`No se pudo conectar con el backend.${hint}`);
+  }
+  return err instanceof Error ? err : new Error(String(err));
+}
+
 export async function* streamChat(
   request: ChatRequest,
   signal?: AbortSignal,
 ): AsyncGenerator<SSEEvent> {
   const base = getBase();
-  const response = await fetch(`${base}/v1/chat/completions`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(request),
-    signal,
-  });
+  let response: Response;
+  try {
+    response = await fetch(`${base}/v1/chat/completions`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(request),
+      signal,
+    });
+  } catch (e) {
+    throw formatChatFetchError(e);
+  }
 
   if (!response.ok) {
     let detail = '';

@@ -48,6 +48,25 @@ export function normalizeApiBase(url: string): string {
   return u;
 }
 
+/**
+ * En `npm run dev`, si la API es loopback en el puerto por defecto de `jarvis serve`,
+ * usar URL relativa (proxy de Vite) evita peticiones cross-origin → "Failed to fetch".
+ */
+function shouldUseViteProxyInsteadOfExplicitLoopback8000(base: string): boolean {
+  if (!import.meta.env.DEV || isTauri() || !base) return false;
+  try {
+    const u = new URL(base);
+    if (u.protocol !== 'http:') return false;
+    const loopback =
+      u.hostname === 'localhost' ||
+      u.hostname === '127.0.0.1' ||
+      u.hostname === '[::1]';
+    return loopback && u.port === '8000';
+  } catch {
+    return false;
+  }
+}
+
 const SETTINGS_STORAGE_KEY = 'openjarvis-settings';
 
 /** Ollama daemon (`ollama serve`) — not the OpenJarvis API (`getBase()`). */
@@ -110,9 +129,15 @@ export async function storedCustomApiUrlIsWrongBackend(): Promise<boolean> {
 
 export const getBase = (): string => {
   const settingsUrl = getStoredSettingsApiUrl();
-  if (settingsUrl) return settingsUrl;
+  if (settingsUrl) {
+    const n = normalizeApiBase(settingsUrl);
+    if (shouldUseViteProxyInsteadOfExplicitLoopback8000(n)) return '';
+    return n;
+  }
   if (import.meta.env.VITE_API_URL) {
-    return normalizeApiBase(String(import.meta.env.VITE_API_URL));
+    const n = normalizeApiBase(String(import.meta.env.VITE_API_URL));
+    if (shouldUseViteProxyInsteadOfExplicitLoopback8000(n)) return '';
+    return n;
   }
   if (isTauri()) {
     return normalizeApiBase(_tauriApiBase || DESKTOP_API_FALLBACK);
@@ -261,8 +286,14 @@ export async function checkHealth(): Promise<boolean> {
     }
   }
   try {
-    const res = await fetch(`${getBase()}/health`);
-    return res.ok;
+    const base = getBase();
+    // `/health` exige `engine.health()` y devuelve 503 si Ollama no responde;
+    // eso marcaba "Disconnected" aunque `jarvis serve` estuviera bien. `/v1/info`
+    // solo comprueba que el API OpenJarvis contesta.
+    const res = await fetch(`${base}/v1/info`);
+    if (res.ok) return true;
+    const h = await fetch(`${base}/health`);
+    return h.ok;
   } catch {
     return false;
   }

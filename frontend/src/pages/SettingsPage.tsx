@@ -141,7 +141,21 @@ export function SettingsPage() {
   });
 
   useEffect(() => {
-    checkHealth().then(setHealthy);
+    let cancelled = false;
+    const tick = () => {
+      checkHealth().then((h) => {
+        if (!cancelled) setHealthy(h);
+      });
+    };
+    tick();
+    const id = setInterval(tick, 8000);
+    return () => {
+      cancelled = true;
+      clearInterval(id);
+    };
+  }, [settings.apiUrl]);
+
+  useEffect(() => {
     fetchSpeechHealth()
       .then((h) => setSpeechBackendAvailable(h.available))
       .catch(() => setSpeechBackendAvailable(false));
@@ -280,7 +294,7 @@ export function SettingsPage() {
                 </span>
               </div>
             </SettingRow>
-            <SettingRow label="API URL" description="Solo el origen del backend OpenJarvis (p. ej. http://localhost:8000). No incluyas /v1. No uses la URL de AgentKit/Renata.">
+            <SettingRow label="API URL" description="Origen de `jarvis serve` (p. ej. http://127.0.0.1:8000), sin /v1 ni AgentKit. En desarrollo con Vite puedes dejarlo vacío: el proxy evita errores de red tipo “Failed to fetch”.">
               <input
                 type="text"
                 value={settings.apiUrl}
