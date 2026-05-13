@@ -1390,6 +1390,7 @@ function AgentInstructionSection({ agent, onAgentUpdated }: { agent: ManagedAgen
 }
 
 function AgentConfigGrid({ agent, onAgentUpdated }: { agent: ManagedAgent; onAgentUpdated: () => void }) {
+  const ollamaUrl = useAppStore((s) => s.settings.ollamaUrl);
   const [editingModel, setEditingModel] = useState(false);
   const [changingModel, setChangingModel] = useState(false);
   const [models, setModels] = useState<string[]>([]);
@@ -1403,7 +1404,8 @@ function AgentConfigGrid({ agent, onAgentUpdated }: { agent: ManagedAgent; onAge
     let cancelled = false;
     async function checkModel() {
       try {
-        const res = await fetch('http://localhost:11434/api/tags');
+        const base = (ollamaUrl || '').trim().replace(/\/+$/, '') || 'http://127.0.0.1:11434';
+        const res = await fetch(`${base}/api/tags`);
         if (!res.ok) { setModelAvailable('unknown'); return; }
         const data = await res.json();
         const loadedNames: string[] = (data.models || []).map((m: { name: string }) => m.name);
@@ -1424,7 +1426,7 @@ function AgentConfigGrid({ agent, onAgentUpdated }: { agent: ManagedAgent; onAge
     }
     checkModel();
     return () => { cancelled = true; };
-  }, [currentModel]);
+  }, [currentModel, ollamaUrl]);
 
   async function startEditingModel() {
     try {
@@ -1433,7 +1435,8 @@ function AgentConfigGrid({ agent, onAgentUpdated }: { agent: ManagedAgent; onAge
     } catch { /* ignore */ }
     // Also refresh Ollama models for availability indication
     try {
-      const res = await fetch('http://localhost:11434/api/tags');
+      const base = (useAppStore.getState().settings.ollamaUrl || '').trim().replace(/\/+$/, '') || 'http://127.0.0.1:11434';
+      const res = await fetch(`${base}/api/tags`);
       if (res.ok) {
         const data = await res.json();
         setOllamaModels((data.models || []).map((m: { name: string }) => m.name));

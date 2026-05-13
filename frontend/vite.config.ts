@@ -15,6 +15,11 @@ export default defineConfig({
     tailwindcss(),
     VitePWA({
       registerType: 'autoUpdate',
+      // Evita que un service worker viejo sirva JS obsoleto en `npm run dev`
+      // (síntomas: imports a archivos que ya no existen, ej. MainLayout/Footer).
+      devOptions: {
+        enabled: false,
+      },
       manifest: {
         name: 'OpenJarvis',
         short_name: 'Jarvis',
@@ -50,9 +55,18 @@ export default defineConfig({
   },
   server: {
     port: 5173,
+    host: 'localhost',
+    hmr: {
+      host: 'localhost',
+      clientPort: 5173,
+    },
+    // El proxy del servidor de desarrollo debe apuntar siempre a `jarvis serve`
+    // (p. ej. :8000). `VITE_API_URL` es solo para el *cliente* (import.meta.env)
+    // y a veces apunta a otro servicio (AgentKit, producción) — reutilizarlo aquí
+    // rompe `/v1/*` con 404. Override: `VITE_DEV_PROXY=http://127.0.0.1:9000 npm run dev`.
     proxy: {
-      '/v1': process.env.VITE_API_URL || 'http://localhost:8000',
-      '/health': process.env.VITE_API_URL || 'http://localhost:8000',
+      '/v1': process.env.VITE_DEV_PROXY || 'http://127.0.0.1:8000',
+      '/health': process.env.VITE_DEV_PROXY || 'http://127.0.0.1:8000',
     },
   },
 });

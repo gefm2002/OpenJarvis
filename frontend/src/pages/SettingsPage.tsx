@@ -20,14 +20,15 @@ import {
 import { useAppStore, type ThemeMode } from '../lib/store';
 import { checkHealth, fetchSpeechHealth, getMemoryStats } from '../lib/api';
 
-function OllamaModelList() {
+function OllamaModelList({ baseUrl }: { baseUrl: string }) {
   const [models, setModels] = useState<Array<{ name: string; size: number }>>([]);
   useEffect(() => {
-    fetch('http://localhost:11434/api/tags')
+    const b = (baseUrl || '').trim().replace(/\/+$/, '') || 'http://127.0.0.1:11434';
+    fetch(`${b}/api/tags`)
       .then(r => r.json())
       .then(data => setModels((data.models || []).map((m: any) => ({ name: m.name, size: m.size }))))
       .catch(() => setModels([]));
-  }, []);
+  }, [baseUrl]);
   if (models.length === 0) return <span className="text-xs" style={{ color: 'var(--color-text-tertiary)' }}>No models loaded</span>;
   return (
     <div className="flex flex-wrap gap-1">
@@ -279,7 +280,7 @@ export function SettingsPage() {
                 </span>
               </div>
             </SettingRow>
-            <SettingRow label="API URL" description="Set if backend runs on a different port or host">
+            <SettingRow label="API URL" description="Solo el origen del backend OpenJarvis (p. ej. http://localhost:8000). No incluyas /v1. No uses la URL de AgentKit/Renata.">
               <input
                 type="text"
                 value={settings.apiUrl}
@@ -293,12 +294,26 @@ export function SettingsPage() {
                 }}
               />
             </SettingRow>
+            <SettingRow label="Ollama URL" description="Servidor Ollama (puerto 11434). Es independiente del backend de arriba; solo sirve para listar modelos y precarga local.">
+              <input
+                type="text"
+                value={settings.ollamaUrl}
+                onChange={(e) => { updateSettings({ ollamaUrl: e.target.value }); showSaved(); }}
+                placeholder="http://127.0.0.1:11434"
+                className="text-sm px-3 py-1.5 rounded-lg outline-none w-56"
+                style={{
+                  background: 'var(--color-bg-secondary)',
+                  color: 'var(--color-text)',
+                  border: '1px solid var(--color-border)',
+                }}
+              />
+            </SettingRow>
           </Section>
 
           {/* Models */}
           <Section title="Models">
             <SettingRow label="Local models (Ollama)" description="Models available for local inference">
-              <OllamaModelList />
+              <OllamaModelList baseUrl={settings.ollamaUrl} />
             </SettingRow>
             <div className="text-xs mt-2 px-1" style={{ color: 'var(--color-text-tertiary)' }}>
               Run <code className="px-1 py-0.5 rounded text-[11px]" style={{ background: 'var(--color-bg-tertiary)' }}>ollama pull &lt;model-name&gt;</code> in your terminal to add more models

@@ -67,6 +67,8 @@ export type ThemeMode = 'light' | 'dark' | 'system';
 interface Settings {
   theme: ThemeMode;
   apiUrl: string;
+  /** Base URL for Ollama HTTP API (port 11434). Independent of OpenJarvis backend (`apiUrl`). */
+  ollamaUrl: string;
   fontSize: 'small' | 'default' | 'large';
   defaultModel: string;
   defaultAgent: string;
@@ -79,6 +81,7 @@ function loadSettings(): Settings {
   const defaults: Settings = {
     theme: 'system',
     apiUrl: '',
+    ollamaUrl: 'http://127.0.0.1:11434',
     fontSize: 'default',
     defaultModel: '',
     defaultAgent: '',

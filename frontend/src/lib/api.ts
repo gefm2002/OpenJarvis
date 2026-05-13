@@ -33,22 +33,90 @@ export async function initApiBase(): Promise<void> {
 
 const DESKTOP_API_FALLBACK = 'http://127.0.0.1:8000';
 
-const getSettingsApiUrl = (): string => {
+/**
+ * Users often paste `http://host:8000/v1` (OpenAI-style base). Our client
+ * always adds `/v1/...` paths — strip a trailing `/v1` to avoid `/v1/v1/...` → 404.
+ */
+export function normalizeApiBase(url: string): string {
+  let u = url.trim();
+  if (!u) return '';
+  u = u.replace(/\/+$/, '');
+  if (u.endsWith('/v1')) {
+    u = u.slice(0, -3);
+    u = u.replace(/\/+$/, '');
+  }
+  return u;
+}
+
+const SETTINGS_STORAGE_KEY = 'openjarvis-settings';
+
+/** Ollama daemon (`ollama serve`) — not the OpenJarvis API (`getBase()`). */
+export function getOllamaBase(): string {
   try {
-    const raw = localStorage.getItem('openjarvis-settings');
+    const raw = localStorage.getItem(SETTINGS_STORAGE_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw) as { ollamaUrl?: string };
+      const u = String(parsed.ollamaUrl || '').trim().replace(/\/+$/, '');
+      if (u) return u;
+    }
+  } catch {
+    /* ignore */
+  }
+  return 'http://127.0.0.1:11434';
+}
+
+/** URL de API guardada en Ajustes (no incluye `VITE_API_URL`). */
+export function getStoredSettingsApiUrl(): string {
+  try {
+    const raw = localStorage.getItem(SETTINGS_STORAGE_KEY);
     if (raw) {
       const parsed = JSON.parse(raw);
-      if (parsed.apiUrl) return parsed.apiUrl.replace(/\/+$/, '');
+      if (parsed.apiUrl) return normalizeApiBase(String(parsed.apiUrl));
     }
   } catch {}
   return '';
-};
+}
+
+/** Comprueba si `base` responde como OpenJarvis (`GET /v1/info` con campo `engine`). */
+export async function probeOpenJarvisBackend(absoluteBase: string): Promise<'openjarvis' | 'not_openjarvis' | 'unreachable'> {
+  const base = normalizeApiBase(absoluteBase.trim());
+  if (!base) return 'openjarvis';
+  const controller = new AbortController();
+  const t = window.setTimeout(() => controller.abort(), 8000);
+  try {
+    const res = await fetch(`${base}/v1/info`, { signal: controller.signal });
+    window.clearTimeout(t);
+    if (!res.ok) return 'not_openjarvis';
+    const j = (await res.json().catch(() => ({}))) as { engine?: unknown };
+    return typeof j.engine === 'string' ? 'openjarvis' : 'not_openjarvis';
+  } catch {
+    window.clearTimeout(t);
+    return 'unreachable';
+  }
+}
+
+/**
+ * Si en localStorage hay una API URL que no es OpenJarvis (p. ej. AgentKit),
+ * conviene borrarla para usar el proxy de Vite (`/v1` → jarvis en :8000).
+ * No toca URLs inalcanzables (jarvis apagado, red, etc.).
+ */
+export async function storedCustomApiUrlIsWrongBackend(): Promise<boolean> {
+  if (isTauri()) return false;
+  const apiUrl = getStoredSettingsApiUrl();
+  if (!apiUrl) return false;
+  const p = await probeOpenJarvisBackend(apiUrl);
+  return p === 'not_openjarvis';
+}
 
 export const getBase = (): string => {
-  const settingsUrl = getSettingsApiUrl();
+  const settingsUrl = getStoredSettingsApiUrl();
   if (settingsUrl) return settingsUrl;
-  if (import.meta.env.VITE_API_URL) return import.meta.env.VITE_API_URL;
-  if (isTauri()) return _tauriApiBase || DESKTOP_API_FALLBACK;
+  if (import.meta.env.VITE_API_URL) {
+    return normalizeApiBase(String(import.meta.env.VITE_API_URL));
+  }
+  if (isTauri()) {
+    return normalizeApiBase(_tauriApiBase || DESKTOP_API_FALLBACK);
+  }
   return '';
 };
 
@@ -156,7 +224,7 @@ export async function preloadModel(modelName: string): Promise<void> {
     return;
   }
   // Trigger Ollama to load the model into memory (empty prompt, no generation).
-  const ollamaUrl = 'http://127.0.0.1:11434';
+  const ollamaUrl = getOllamaBase();
   try {
     const res = await fetch(`${ollamaUrl}/api/generate`, {
       method: 'POST',

@@ -22,7 +22,15 @@ export async function* streamChat(
   });
 
   if (!response.ok) {
-    throw new Error(`Chat request failed: ${response.status}`);
+    let detail = '';
+    try {
+      detail = (await response.clone().text()).slice(0, 240);
+    } catch {
+      /* ignore */
+    }
+    throw new Error(
+      `Chat request failed: ${response.status} ${response.statusText}${detail ? ` — ${detail}` : ''}`,
+    );
   }
 
   const reader = response.body!.getReader();

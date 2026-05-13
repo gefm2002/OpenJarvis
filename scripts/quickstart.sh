@@ -27,7 +27,8 @@ CLEANUP_PIDS=()
 cleanup() {
   echo ""
   info "Shutting down..."
-  for pid in "${CLEANUP_PIDS[@]}"; do
+  # With `set -u`, an empty array makes "${CLEANUP_PIDS[@]}" error — use Bash+ parameter expansion.
+  for pid in ${CLEANUP_PIDS[@]+"${CLEANUP_PIDS[@]}"}; do
     kill "$pid" 2>/dev/null || true
   done
   wait 2>/dev/null || true
@@ -133,11 +134,24 @@ fi
 # ── 6. Pull a starter model ─────────────────────────────────────────
 MODEL="${OPENJARVIS_MODEL:-qwen3:0.6b}"
 info "Ensuring model '$MODEL' is available..."
-if ollama list 2>/dev/null | grep -q "$MODEL"; then
-  ok "Model '$MODEL' already pulled"
+# Prefer `ollama show` — works offline and avoids grep/regex vs `ollama list` columns.
+if ollama show "$MODEL" &>/dev/null; then
+  ok "Model '$MODEL' already available locally"
 else
   info "Pulling '$MODEL' (this may take a minute)..."
-  ollama pull "$MODEL"
+  if ! ollama pull "$MODEL"; then
+    echo ""
+    fail "ollama pull '$MODEL' failed (often TLS / certificate on macOS or corporate VPN).
+
+  Qué probar:
+  - Usá un nombre exacto de tu inventario local: ollama list
+    Ej.: OPENJARVIS_MODEL=qwen2.5:3b ./scripts/quickstart.sh
+  - Sin VPN / otra red; actualizar Ollama: brew upgrade ollama
+  - Bajar el modelo desde la app Ollama (GUI) y re-ejecutar este script
+  - Si la empresa intercepta HTTPS: instalar el cert raíz en el llavero del sistema
+
+  Luego: OPENJARVIS_MODEL=$MODEL ./scripts/quickstart.sh"
+  fi
   ok "Model '$MODEL' ready"
 fi
 
@@ -146,11 +160,18 @@ info "Installing Python dependencies..."
 uv sync --extra server --quiet 2>/dev/null || uv sync --extra server
 ok "Python dependencies installed"
 
-# ── 7b. Build Rust extension ──────────────────────────────────────
-info "Building Rust extension..."
-uv run maturin develop -m rust/crates/openjarvis-python/Cargo.toml --quiet 2>/dev/null \
-  || uv run maturin develop -m rust/crates/openjarvis-python/Cargo.toml
-ok "Rust extension built"
+# ── 7b. Build Rust extension (optional — chat UI works without it) ──
+if command -v rustc &>/dev/null; then
+  info "Building Rust extension..."
+  if uv run maturin develop -m rust/crates/openjarvis-python/Cargo.toml --quiet 2>/dev/null \
+    || uv run maturin develop -m rust/crates/openjarvis-python/Cargo.toml; then
+    ok "Rust extension built"
+  else
+    warn "Rust extension build failed — memory/index features may be limited until fixed."
+  fi
+else
+  warn "rustc not in PATH — skipping Rust extension. Chat + Ollama still work; for full features: curl https://sh.rustup.rs -sSf | sh  (or: brew install rust)"
+fi
 
 # ── 8. Install frontend dependencies ────────────────────────────────
 info "Installing frontend dependencies..."

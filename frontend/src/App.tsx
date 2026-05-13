@@ -10,9 +10,19 @@ import { DataSourcesPage } from './pages/DataSourcesPage';
 import { LogsPage } from './pages/LogsPage';
 import { CommandPalette } from './components/CommandPalette';
 import { SetupScreen } from './components/SetupScreen';
+import { toast } from 'sonner';
 import { Toaster } from './components/ui/sonner';
 import { useAppStore } from './lib/store';
-import { fetchModels, fetchServerInfo, fetchSavings, submitSavings, isTauri } from './lib/api';
+import {
+  fetchModels,
+  fetchServerInfo,
+  fetchSavings,
+  submitSavings,
+  isTauri,
+  getStoredSettingsApiUrl,
+  probeOpenJarvisBackend,
+  normalizeApiBase,
+} from './lib/api';
 import { OptInModal } from './components/OptInModal';
 
 export default function App() {
@@ -44,6 +54,26 @@ export default function App() {
     if (settings.theme === 'dark') root.classList.add('dark');
     else if (settings.theme === 'light') root.classList.add('light');
   }, [settings.theme]);
+
+  // Aviso si `VITE_API_URL` en desarrollo apunta a otro servicio (p. ej. AgentKit).
+  useEffect(() => {
+    if (isTauri() || !import.meta.env.DEV) return;
+    const envUrl = import.meta.env.VITE_API_URL
+      ? normalizeApiBase(String(import.meta.env.VITE_API_URL))
+      : '';
+    if (!envUrl) return;
+    if (getStoredSettingsApiUrl()) return;
+    let cancelled = false;
+    void probeOpenJarvisBackend(envUrl).then((p) => {
+      if (cancelled || p !== 'not_openjarvis') return;
+      toast.warning(
+        'VITE_API_URL no apunta a OpenJarvis (`jarvis serve`). Quita esa variable o usa la URL correcta y reinicia `npm run dev`.',
+      );
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   // Sync overlay conversations into the main app
   const importOverlay = useAppStore((s) => s.importOverlayConversation);
