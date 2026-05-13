@@ -29,6 +29,7 @@ class TestServerConfigDefaults:
         assert isinstance(cfg.cors_origins, list)
         assert "http://localhost:3000" in cfg.cors_origins
         assert "http://localhost:5173" in cfg.cors_origins
+        assert "http://localhost:5183" in cfg.cors_origins
         # All three Tauri 2 production webview origins must be allowed
         # so the desktop chat stream works on every platform.
         assert "tauri://localhost" in cfg.cors_origins

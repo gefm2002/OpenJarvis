@@ -21,6 +21,7 @@ import {
   isTauri,
   getStoredSettingsApiUrl,
   probeOpenJarvisBackend,
+  probeDevJarvisProxyTarget,
   normalizeApiBase,
 } from './lib/api';
 import { OptInModal } from './components/OptInModal';
@@ -68,6 +69,22 @@ export default function App() {
       if (cancelled || p !== 'not_openjarvis') return;
       toast.warning(
         'VITE_API_URL no apunta a OpenJarvis (`jarvis serve`). Quita esa variable o usa la URL correcta y reinicia `npm run dev`.',
+      );
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // Proxy por defecto → :8000: si ahí hay otro FastAPI (p. ej. AgentKit), `/v1/*` será 404.
+  useEffect(() => {
+    if (isTauri() || !import.meta.env.DEV) return;
+    let cancelled = false;
+    void probeDevJarvisProxyTarget().then((p) => {
+      if (cancelled || p !== 'wrong_service') return;
+      toast.warning(
+        'El proxy de desarrollo no ve OpenJarvis en el backend (404 o respuesta inesperada en `/v1/info`). Suele pasar si el puerto 8000 lo usa otro servicio (p. ej. AgentKit). Arranca `jarvis serve` en otro puerto y reenvía el UI: `VITE_DEV_PROXY=http://127.0.0.1:8001 npm run dev` con `uv run jarvis serve --port 8001`.',
+        { duration: 14_000 },
       );
     });
     return () => {

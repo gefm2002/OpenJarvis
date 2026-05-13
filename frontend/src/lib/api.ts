@@ -96,6 +96,13 @@ export function getStoredSettingsApiUrl(): string {
   return '';
 }
 
+/** URL de `GET /v1/info` sin disparar CORS (mismo origen en dev + proxy cuando aplica). */
+function resolveV1InfoProbeUrl(normalizedBase: string): string {
+  if (!normalizedBase) return '/v1/info';
+  if (shouldUseViteProxyInsteadOfExplicitLoopback8000(normalizedBase)) return '/v1/info';
+  return `${normalizedBase}/v1/info`;
+}
+
 /** Comprueba si `base` responde como OpenJarvis (`GET /v1/info` con campo `engine`). */
 export async function probeOpenJarvisBackend(absoluteBase: string): Promise<'openjarvis' | 'not_openjarvis' | 'unreachable'> {
   const base = normalizeApiBase(absoluteBase.trim());
@@ -103,13 +110,33 @@ export async function probeOpenJarvisBackend(absoluteBase: string): Promise<'ope
   const controller = new AbortController();
   const t = window.setTimeout(() => controller.abort(), 8000);
   try {
-    const res = await fetch(`${base}/v1/info`, { signal: controller.signal });
+    const res = await fetch(resolveV1InfoProbeUrl(base), { signal: controller.signal });
     window.clearTimeout(t);
     if (!res.ok) return 'not_openjarvis';
     const j = (await res.json().catch(() => ({}))) as { engine?: unknown };
     return typeof j.engine === 'string' ? 'openjarvis' : 'not_openjarvis';
   } catch {
     window.clearTimeout(t);
+    return 'unreachable';
+  }
+}
+
+/**
+ * En `npm run dev`, con base de API vacía (proxy de Vite → `VITE_DEV_PROXY`),
+ * comprueba que detrás del proxy hay OpenJarvis (`/v1/info` con `engine`).
+ * Si en el puerto por defecto hay otro FastAPI (p. ej. AgentKit), `/v1/*` devuelve 404.
+ */
+export async function probeDevJarvisProxyTarget(): Promise<
+  'ok' | 'wrong_service' | 'unreachable' | 'skipped'
+> {
+  if (!import.meta.env.DEV || isTauri()) return 'skipped';
+  if (getBase() !== '') return 'skipped';
+  try {
+    const res = await fetch('/v1/info');
+    if (!res.ok) return 'wrong_service';
+    const j = (await res.json().catch(() => ({}))) as { engine?: unknown };
+    return typeof j.engine === 'string' ? 'ok' : 'wrong_service';
+  } catch {
     return 'unreachable';
   }
 }

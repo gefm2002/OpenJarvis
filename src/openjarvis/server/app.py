@@ -186,7 +186,9 @@ def create_app(
         if cors_origins is not None
         else [
             "http://localhost:5173",
+            "http://localhost:5183",
             "http://127.0.0.1:5173",
+            "http://127.0.0.1:5183",
             # Tauri 2 production webview origins:
             #   macOS / Linux / iOS  -> tauri://localhost
             #   Windows / Android    -> http://tauri.localhost (default),
@@ -197,9 +199,14 @@ def create_app(
             "https://tauri.localhost",
         ]
     )
+    # Regex: cualquier puerto en loopback (Vite 5173/4173, etc.) sin listar cada uno.
+    # El navegador solo envía orígenes reales; no sustituye a `allow_origins` restrictivos
+    # para orígenes que no encajen en el patrón.
+    _loopback_origin_re = r"^https?://(localhost|127\.0\.0\.1|\[::1\])(:\d+)?$"
     app.add_middleware(
         CORSMiddleware,
         allow_origins=_origins,
+        allow_origin_regex=_loopback_origin_re,
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],

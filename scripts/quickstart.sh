@@ -191,14 +191,16 @@ else
 fi
 
 # ── 10. Start frontend ──────────────────────────────────────────────
-info "Starting frontend dev server on port 5173..."
-(cd frontend && npm run dev) &>/dev/null &
+# 5183 por defecto: 5173 suele estar ocupado por otro Vite/React.
+FRONTEND_PORT="${VITE_DEV_PORT:-5183}"
+info "Starting frontend dev server on port ${FRONTEND_PORT}..."
+(cd frontend && VITE_DEV_PORT="${FRONTEND_PORT}" npm run dev) &>/dev/null &
 CLEANUP_PIDS+=($!)
 sleep 3
-ok "Frontend running at http://localhost:5173"
+ok "Frontend running at http://localhost:${FRONTEND_PORT}"
 
 # ── 11. Open browser ────────────────────────────────────────────────
-URL="http://localhost:5173"
+URL="http://localhost:${FRONTEND_PORT}"
 info "Opening $URL ..."
 case "$(uname -s)" in
   Darwin) open "$URL" ;;
@@ -209,7 +211,7 @@ esac
 echo ""
 echo -e "${GREEN}${BOLD}  OpenJarvis is running!${NC}"
 echo ""
-echo "  Chat UI:  http://localhost:5173"
+echo "  Chat UI:  http://localhost:${FRONTEND_PORT}"
 echo "  API:      http://localhost:8000"
 echo "  Model:    $MODEL"
 echo ""
